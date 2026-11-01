@@ -1,0 +1,41 @@
+{
+  "name": "ai-knowledge-memory",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:h": "node scripts/build.mjs --h",
+    "prepare:h": "node scripts/prepare-h-model.mjs",
+    "test:h": "npm run build:h && playwright test --config playwright.h.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:browser": "node scripts/build-test-probe.mjs && playwright test",
+    "check": "npm run typecheck && npm test && npm run build && npm run test:browser",
+    "audit:package": "node scripts/audit-package.mjs",
+    "evaluate:lexical": "node scripts/evaluate-lexical.ts",
+    "measure:a6": "node scripts/measure-backup.mjs",
+    "licenses": "node scripts/licenses.mjs"
+  },
+  "dependencies": {
+    "dexie": "4.4.6",
+    "marked": "18.1.1",
+    "minisearch": "7.2.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@huggingface/transformers": "4.3.1",
+    "@playwright/test": "1.64.1",
+    "@types/chrome": "0.3.5",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
+  }
+}

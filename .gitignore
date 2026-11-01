@@ -1,0 +1,16 @@
+node_modules/
+dist/
+dist-h/
+.cache/
+test-results/
+playwright-report/
+artifacts/
+*.tsbuildinfo
+
+
+# Local diagnostics and credentials
+stderr/
+.env
+.env.*
+!.env.example
+*.log

@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "AI Knowledge Memory — A5 curation and source control",
+  "version": "0.0.1",
+  "description": "Curate notes and ChatGPT excerpts, review source history, search locally, and control retained content with deletion previews.",
+  "minimum_chrome_version": "155",
+  "incognito": "not_allowed",
+  "permissions": ["storage", "scripting", "activeTab", "contextMenus", "sidePanel", "unlimitedStorage"],
+  "optional_host_permissions": ["https://chatgpt.com/*"],
+  "background": { "service_worker": "service-worker.js", "type": "module" },
+  "action": { "default_title": "Open AI Knowledge Memory" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "options_ui": { "page": "library.html", "open_in_tab": true },
+  "commands": {
+    "open-recall": {
+      "suggested_key": { "default": "Alt+Shift+K" },
+      "description": "Open recall"
+    },
+    "preview-selection": {
+      "suggested_key": { "default": "Alt+Shift+Y" },
+      "description": "Preview selected passage (A0; not saved)"
+    },
+    "keep-selection": {
+      "description": "Keep selected passage in Knowledge"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self'; worker-src 'self'; connect-src 'none'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none';"
+  }
+}

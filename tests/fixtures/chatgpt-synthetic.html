@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Synthetic conversation — A0 fixture</title></head><body>
+<nav>Sidebar content must not be captured</nav>
+<main>
+<article data-message-author-role="user" data-message-id="u1"><p id="user-text">Explain HT-928 🧠 中文.</p></article>
+<article data-message-author-role="assistant" data-message-id="a1"><div class="markdown"><p id="answer-text">Start 🧠 中文 then retry.</p><pre><code id="code-text">function retry() {
+	const value = "HT-928";
+    return value;
+}
+</code></pre><p id="repeat-one">Repeated quote.</p><p id="repeat-two">Repeated quote.</p></div><button>Copy control</button><span hidden>Hidden duplicate answer</span></article>
+<article data-message-author-role="assistant" data-message-id="a2"><p id="stream-text">An unfinished answer</p></article>
+<div contenteditable="true" role="textbox" aria-label="Composer">Private unsent prompt</div>
+<input type="password" value="synthetic-placeholder">
+</main>
+<button id="focus-target">Move focus</button>
+</body></html>

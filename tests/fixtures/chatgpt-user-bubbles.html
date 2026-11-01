@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Observed user bubbles — synthetic capture regression</title></head><body>
+<!-- User bubble + conversation-target nesting observed in Chrome on October 20.
+     Assistant selection/style attributes also observed. All text/IDs invented.
+     Search-unit and turn keys are layout metadata, not trusted message identity. -->
+<nav><div data-user-message-bubble="true">SIDEBAR-SECRET</div></nav>
+<div data-user-message-bubble="true">UNRELATED-SECRET</div>
+<main><div data-chatgpt-conversation-selection-target="true" data-thread-find-target="conversation">
+<div data-turn-key="synthetic-turn-1"><div data-content-search-turn-key="fallback-turn-0">
+<div data-talvt-turn-state="complete">
+<div><h4 class="sr-only">You said:</h4>
+<div data-chatgpt-search-unit-key="fallback-turn-0:0:user" data-chatgpt-search-message-ids="search-user-1">
+<div data-content-search-unit-key="fallback-turn-0:0:user"><div class="group/user-message">
+<div data-user-message-bubble="true" id="question-one"><div><div data-search-result-target><div><div class="text-size-chat whitespace-pre-wrap" dir="auto" id="user-text">Explain ORACLE-QUESTION-731 🧠 中文.</div></div></div></div></div>
+<div><button>Edit prompt</button></div></div></div></div></div>
+<div data-chatgpt-search-unit-key="fallback-turn-0:2:assistant"><h4 data-conversation-role="assistant">ChatGPT said:</h4>
+<div data-chatgpt-selection-conversation-id="bubble-test" data-chatgpt-selection-message-id="answer-one"><div data-markdown-text-style="assistant-message"><div data-dil-source-message-id="renderer-source-1"><div data-dil-message-id="renderer-instance-1"><p id="answer-text">ORACLE-ANSWER-842 returns one row. 中文解释。</p><pre><code id="code-text" class="language-sql">SELECT
+	1 AS value,  -- 中文 🧠
+    'two  spaces' AS label
+FROM dual;
+</code></pre></div></div></div><button>Copy answer</button><span hidden>HIDDEN-TEXT-SECRET</span></div></div>
+</div></div></div>
+<div data-turn-key="synthetic-turn-2"><div data-content-search-turn-key="fallback-turn-1">
+<div data-chatgpt-search-unit-key="fallback-turn-1:0:user" data-chatgpt-search-message-ids="search-user-2"><div data-user-message-bubble="true" id="question-two"><div data-user-message-bubble="true"><div class="whitespace-pre-wrap" id="followup-text">FOLLOWUP-QUESTION-953 请保留缩进。</div></div></div></div>
+<div data-chatgpt-search-unit-key="fallback-turn-1:2:assistant"><div data-chatgpt-selection-conversation-id="bubble-test" data-chatgpt-selection-message-id="answer-two"><div data-markdown-text-style="assistant-message"><p>FOLLOWUP-ANSWER-164 Indentation retained.</p></div></div></div>
+</div></div>
+<div hidden data-user-message-bubble="true">HIDDEN-MESSAGE-SECRET</div>
+<div style="display:none" data-user-message-bubble="true">CSS-HIDDEN-SECRET</div>
+<aside><div data-user-message-bubble="true">ASIDE-SECRET</div></aside>
+<div contenteditable="true" role="textbox" id="composer"><div data-user-message-bubble="true">UNSENT-DRAFT-SECRET</div></div>
+</div></main></body></html>
