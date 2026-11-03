@@ -4,6 +4,8 @@ import type { CurateSelection, CurationCommand, CurationReply, SelectionAction }
 import type { SaveResult } from '../shared/knowledge';
 import { installLoadedControls } from './loaded-controls';
 import { locateOriginal } from '../capture/locate';
+import { createSelectionPanel } from './selection-panel';
+import { listenForSelectionEvents } from './selection-events';
 
 const globals = globalThis as typeof globalThis & { __akmA0?: { dispose: () => void } };
 if (!globals.__akmA0) install();
@@ -33,25 +35,10 @@ function install(): void {
   let pending: Attempt | undefined;
   let allowanceEpoch: number | undefined;
   let keepIntent: { nonce: string; epoch: number; snapshot: FrozenSelection; requiresAllowance: boolean; command?: CurateSelection } | undefined;
-  const host = document.createElement('div');
-  host.id = 'akm-a0-probe';
-  Object.assign(host.style, { position: 'fixed', right: '20px', bottom: '20px', zIndex: '2147483647' });
-  const shadow = host.attachShadow({ mode: 'open' });
-  const button = document.createElement('button');
-  button.textContent = 'Preview selection';
-  button.hidden = true;
-  Object.assign(button.style, { padding: '12px 16px', background: '#173b35', color: '#fff', border: '1px solid #fff', borderRadius: '8px', font: '14px system-ui', cursor: 'pointer' });
-  const keepButton = button.cloneNode() as HTMLButtonElement;
-  keepButton.textContent = 'Keep selection'; keepButton.hidden = true;
-  const panel = document.createElement('section');
-  panel.hidden = true;
-  panel.setAttribute('aria-label', 'Selection preview');
-  Object.assign(panel.style, { background: '#fff', color: '#172e2a', padding: '16px', border: '2px solid #173b35', borderRadius: '8px', maxWidth: 'min(440px, 85vw)', maxHeight: '65vh', overflow: 'auto', font: '14px system-ui' });
-  shadow.append(keepButton, button, panel);
-  document.documentElement.append(host);
+  const { host, shadow, button, keepButton, panel, resetUi, showText, keepMessage, action } =
+    createSelectionPanel(() => { clear(); refresh(); }, () => busy);
   const disposeLoaded = installLoadedControls(shadow);
 
-  function resetUi(): void { button.hidden = true; keepButton.hidden = true; panel.hidden = true; panel.replaceChildren(); }
   function clear(): void { pending = undefined; resetUi(); }
   function invalidateNavigation(): void {
     epoch++;
@@ -67,7 +54,6 @@ function install(): void {
   }
   // Browser Navigation API sees same-document history transitions, including a
   // rapid A → B → A that a later URL comparison alone would miss.
-  const navigation = (window as Window & { navigation?: EventTarget }).navigation;
   function onNavigation(): void { route = canonicalRoute(location.href); invalidateNavigation(); }
   function refresh(): void {
     checkRoute();
@@ -99,30 +85,6 @@ function install(): void {
       return;
     }
     showText(`Preview unavailable: ${code}. Nothing was saved. Use copy/manual paste if this layout is unsupported.`);
-  }
-  function showText(message: string, snapshot?: FrozenSelection): void {
-    if (!host.isConnected) document.documentElement.append(host);
-    button.hidden = true; keepButton.hidden = true;
-    panel.replaceChildren();
-    const title = document.createElement('strong');
-    title.textContent = 'A0 preview — not saved';
-    const body = document.createElement('p');
-    body.textContent = message;
-    panel.append(title, body);
-    if (snapshot) {
-      const pre = document.createElement('pre');
-      pre.textContent = snapshot.selectedText;
-      Object.assign(pre.style, { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: '13px' });
-      const details = document.createElement('p');
-      details.textContent = `${snapshot.fragments.length} source fragment(s). Roles: ${snapshot.fragments.map(f => f.role).join(', ')}. History, completion, and temporary mode: unknown.`;
-      panel.append(pre, details);
-    }
-    const close = document.createElement('button');
-    close.textContent = 'Close preview';
-    close.addEventListener('click', () => { clear(); refresh(); });
-    panel.append(close);
-    panel.hidden = false;
-    close.focus();
   }
   async function preview(source: Source): Promise<void> {
     if (disposed) { showError('PERMISSION_DENIED'); return; }
@@ -163,14 +125,6 @@ function install(): void {
         new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new CaptureError('WRITE_UNCONFIRMED')), 10_000); }),
       ]);
     } finally { clearTimeout(timer); }
-  }
-  function keepMessage(text: string, snapshot?: FrozenSelection): void {
-    showText(text, snapshot);
-    panel.querySelector('strong')!.textContent = 'Knowledge selection';
-  }
-  function action(label: string, run: () => void): void {
-    const control = document.createElement('button'); control.textContent = label;
-    control.addEventListener('click', event => { if (event.isTrusted && !busy) run(); }); panel.append(control);
   }
   function reviewBeforeKeeping(snapshot: FrozenSelection) {
     const reviewEpoch = epoch;
@@ -353,30 +307,10 @@ function install(): void {
       }
     }
   };
-  const observer = new MutationObserver(checkRoute); // Route check only; never accumulates messages.
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  // Capture at window before provider document handlers can stop propagation.
-  window.addEventListener('selectionchange', onSelection, true);
-  window.addEventListener('contextmenu', onContextMenu, true);
-  window.addEventListener('pointerdown', onPointerDown, true);
-  window.addEventListener('keydown', onKeyDown, true);
-  window.addEventListener('pointerup', refresh, true);
-  window.addEventListener('keyup', refresh, true);
-  window.addEventListener('popstate', checkRoute);
-  navigation?.addEventListener('currententrychange', onNavigation);
-  chrome.runtime.onMessage.addListener(onMessage);
+  const stopListening = listenForSelectionEvents({ onSelection, onContextMenu, onPointerDown, onKeyDown, refresh, checkRoute, onNavigation, onMessage });
   function dispose(): void {
     disposeLoaded();
-    disposed = true; epoch++; keepIntent = undefined; allowanceEpoch = undefined; clear(); observer.disconnect();
-    window.removeEventListener('selectionchange', onSelection, true);
-    window.removeEventListener('contextmenu', onContextMenu, true);
-    window.removeEventListener('pointerdown', onPointerDown, true);
-    window.removeEventListener('keydown', onKeyDown, true);
-    window.removeEventListener('pointerup', refresh, true);
-    window.removeEventListener('keyup', refresh, true);
-    window.removeEventListener('popstate', checkRoute);
-    navigation?.removeEventListener('currententrychange', onNavigation);
-    chrome.runtime.onMessage.removeListener(onMessage);
+    disposed = true; epoch++; keepIntent = undefined; allowanceEpoch = undefined; clear(); stopListening();
     host.remove(); delete globals.__akmA0;
   }
   globals.__akmA0 = { dispose };

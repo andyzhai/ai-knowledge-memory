@@ -25,19 +25,7 @@ function mockSender(overrides: Record<string, unknown> = {}): chrome.runtime.Mes
 }
 
 async function load() {
-  const noopEvent = { addListener: vi.fn() };
-  vi.stubGlobal('chrome', {
-    runtime: { id: EXT, getURL: (p: string) => `chrome-extension://${EXT}/${p}`, onMessage: noopEvent, onInstalled: noopEvent, onStartup: noopEvent },
-    storage: { local: { get: async () => ({ chatgptProbeEnabled: true }), set: async () => {}, setAccessLevel: async () => {} } },
-    permissions: { contains: async () => true, onAdded: noopEvent, onRemoved: noopEvent },
-    scripting: { getRegisteredContentScripts: async () => [{}], executeScript: async () => {} },
-    tabs: { query: async () => [{ id: 7 }], sendMessage: async () => undefined, create: async () => undefined },
-    sidePanel: { setPanelBehavior: async () => {} },
-    contextMenus: { onClicked: noopEvent },
-    commands: { onCommand: noopEvent }, action: { setBadgeText: vi.fn(), setTitle: vi.fn() },
-  });
-  const mod = await import('../../src/background/service-worker');
-  return mod.senderCheckFailure;
+  return (await import('../../src/background/authorization')).senderCheckFailure;
 }
 
 type MessageListener = (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (reply: unknown) => void) => boolean;

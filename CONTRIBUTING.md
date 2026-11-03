@@ -17,6 +17,14 @@ Use Node 24.x, install with `npm ci`, and follow the [README](README.md) to buil
 
 Keep storage access behind the background/storage boundary. Preserve sender checks and explicit capture consent. Do not put provider HTML directly into extension pages. Maintain backup compatibility and recovery semantics when changing persistent data.
 
+### Finding the relevant module
+
+`src/background/service-worker.ts` registers browser listeners, gates requests on initialization, parses commands, and publishes change notifications. The larger workflows are in `archive-commands.ts`, `curation-commands.ts`, and `management-commands.ts`; backup transport remains in `backup-service.ts`. Sender checks live in `authorization.ts`, provider state in `provider.ts`, and maintenance recovery in `maintenance.ts`. All serialized operations share `queue.ts`.
+
+`src/ui/ManualLibrary.tsx` owns note loading, draft state, navigation guards, conflicts, and save retries. `NoteEditor.tsx` renders editing controls; `NoteDetails.tsx` renders metadata, sources, and history. Keep pending save intents in the parent when changing these views.
+
+`src/content/index.ts` owns selection intent and navigation state. `selection-panel.ts` renders the controls, and `selection-events.ts` pairs listener registration with cleanup. Loaded-conversation controls remain in `loaded-controls.ts`; DOM projection remains in `src/capture/`.
+
 ## Verification
 
 | Command | Purpose |

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { NOTE_TYPES, libraryError, type HistoryEntry, type KnowledgeItem, type LibraryCommand, type LibraryReply, type NoteFields, type NoteSummary, type SaveManualNote } from '../shared/knowledge';
+import { libraryError, type HistoryEntry, type KnowledgeItem, type LibraryCommand, type LibraryReply, type NoteFields, type NoteSummary, type SaveManualNote } from '../shared/knowledge';
 import { SafeMarkdown } from './SafeMarkdown';
+import { NoteEditor } from './NoteEditor';
+import { NoteMetadata, NoteSources, NoteHistory } from './NoteDetails';
 import type { SourceRef } from '../shared/archive';
 import type { SelectionAction } from '../shared/curation';
-import { safeLink } from '../shared/markdown';
-import { clipboardMarkdown } from '../shared/clipboard-markdown';
-import { DeleteControl, NoteManagement } from './Management';
+import { NoteManagement } from './Management';
 import { KnowledgeSearch } from './KnowledgeSearch';
 import type { NavigationGuard } from './navigation';
 
@@ -25,17 +25,6 @@ async function send(command: LibraryCommand | SelectionAction): Promise<LibraryR
 function fieldsOf(note: KnowledgeItem): NoteFields {
   const { title, bodyMarkdown, type, tags, personalExplanation, applicableVersion, reviewAfter } = note;
   return { title, bodyMarkdown, type, tags, personalExplanation, applicableVersion, reviewAfter };
-}
-function NoteMetadata({ note }: { note: KnowledgeItem }) {
-  return <dl className="note-metadata">
-    <dt>Title</dt><dd>{note.title || 'Untitled note'}</dd>
-    <dt>Type</dt><dd>{note.type.replace('_', ' ')}</dd>
-    <dt>Tags</dt><dd>{note.tags.join(', ') || 'None'}</dd>
-    <dt>Personal explanation</dt><dd>{note.personalExplanation || 'None'}</dd>
-    <dt>Applicable product or version</dt><dd>{note.applicableVersion || 'Not specified'}</dd>
-    <dt>Review date</dt><dd>{note.reviewAfter || 'Not set'}</dd>
-    <dt>Review state</dt><dd>{note.reviewState.replace('_', ' ')}</dd>
-  </dl>;
 }
 export function ManualLibrary({ noteId, selectNote, active, navigationGuard }: { noteId?: string; selectNote: (id?: string, replace?: boolean) => void; active: boolean; navigationGuard: RefObject<NavigationGuard | undefined> }) {
   const [generation, setGeneration] = useState('');
@@ -61,7 +50,6 @@ export function ManualLibrary({ noteId, selectNote, active, navigationGuard }: {
   const [historical, setHistorical] = useState<KnowledgeItem>();
   const [historicalSources, setHistoricalSources] = useState<SourceRef[]>([]);
   const [placeholder, setPlaceholder] = useState('[API_KEY]');
-  const body = useRef<HTMLTextAreaElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
   const [conflict, setConflict] = useState<KnowledgeItem>();
   const [conflictSources, setConflictSources] = useState<SourceRef[]>([]);
@@ -213,6 +201,21 @@ export function ManualLibrary({ noteId, selectNote, active, navigationGuard }: {
     } finally { setBusy(false); }
     return false;
   }
+  async function checkOriginalSource(source: SourceRef) {
+    setSourceChecks(checks => ({ ...checks, [source.id]: 'Checking original source…' }));
+    try {
+      const reply = await chrome.runtime.sendMessage({ protocolVersion: 1, type: 'VerifyOriginalSource', generation, sourceId: source.id });
+      const messages: Record<string, string> = { verified: 'Original source verified now; exact quote selected on the source page.', ambiguous: 'Original source ambiguous; no location was chosen.', missing: 'Original message is not loaded. Its local excerpt remains available.', changed: 'Source changed: the same message identity no longer contains the saved quote.', unavailable: 'Original source unavailable. Open one matching ChatGPT tab with access enabled, or use the local excerpt.' };
+      setSourceChecks(checks => ({ ...checks, [source.id]: messages[reply?.location] ?? 'Original source could not be checked. Local excerpt remains available.' }));
+    } catch { setSourceChecks(checks => ({ ...checks, [source.id]: 'Original source unavailable. Local excerpt remains available.' })); }
+  }
+  async function openRevision(version: number) {
+    setBusy(true);
+    try {
+      const reply = await send({ protocolVersion: 1, type: 'GetNoteRevision', generation, noteId: note!.id, version });
+      if (reply.ok && 'revision' in reply) { setHistorical(reply.revision.snapshot); setHistoricalSources(reply.revision.sources ?? []); } else if (!reply.ok) setFailure(reply);
+    } finally { setBusy(false); }
+  }
   const captured = note?.origin === 'manual_selection';
   const locked = busy || openingNote || !generation || !!pending.current;
   return <section aria-label="Manual knowledge library" className="manual-library" data-has-note={showDetail}>
@@ -248,42 +251,9 @@ export function ManualLibrary({ noteId, selectNote, active, navigationGuard }: {
     </>}
     {editing && <form onSubmit={event => { event.preventDefault(); void save(); }}>
       {note && <p className="caption">{captured ? 'Kept from ChatGPT' : 'Written by you'} · {note.reviewState} · version {note.recordVersion}</p>}
-      <fieldset disabled={locked}>
-        <label htmlFor="note-title">Title (optional)</label><input id="note-title" value={draft.title} onChange={event => change('title', event.target.value)} />
-        <div className="actions markdown-mode" role="group" aria-label="Markdown editor mode">
-          <button type="button" className={preview ? 'secondary' : undefined} aria-pressed={!preview} aria-controls="note-body" onClick={() => setPreview(false)}>Edit</button>
-          <button type="button" className={preview ? undefined : 'secondary'} aria-pressed={preview} aria-controls="note-preview" onClick={() => setPreview(true)}>Preview</button>
-        </div>
-        <div hidden={preview}>
-        <label htmlFor="note-body">Body (Markdown)</label><textarea ref={body} id="note-body" required={!preview} rows={8} value={draft.bodyMarkdown} onChange={event => change('bodyMarkdown', event.target.value)} onPaste={event => {
-          if (locked) return;
-          const markdown = clipboardMarkdown(event.clipboardData);
-          if (!markdown) return;
-          event.preventDefault();
-          const input = event.currentTarget;
-          const start = input.selectionStart;
-          change('bodyMarkdown', input.value.slice(0, start) + markdown + input.value.slice(input.selectionEnd));
-          requestAnimationFrame(() => input.setSelectionRange(start + markdown.length, start + markdown.length));
-        }} />
-        </div>
-        {preview && <div id="note-preview" role="region" aria-label="Markdown preview">{draft.bodyMarkdown ? <SafeMarkdown body={draft.bodyMarkdown} /> : <p>Nothing to preview yet.</p>}</div>}
-        <p className="caption">Up to 256 KiB of UTF-8 text. Nothing is truncated.</p>
-        <details><summary>Metadata and editing tools</summary>
-        <label>Placeholder<input value={placeholder} onChange={e => setPlaceholder(e.target.value)} maxLength={100} /></label>
-        <button type="button" disabled={preview} onClick={() => {
-          const input = body.current; if (!input || input.selectionStart === input.selectionEnd) { setNotice('Select text in the body to replace.'); return; }
-          change('bodyMarkdown', draft.bodyMarkdown.slice(0, input.selectionStart) + placeholder + draft.bodyMarkdown.slice(input.selectionEnd));
-          setNotice('Draft text replaced. Existing source excerpts and earlier history remain until permanently removed.');
-        }}>Replace selected text</button>
-        <p className="caption">Use placeholders for passwords, tokens and other secrets. This library is not a password vault. Body edits preserve the current review state and do not rewrite source excerpts or erase earlier history.</p>
-        <label htmlFor="note-type">Type</label><select id="note-type" value={draft.type} onChange={event => change('type', event.target.value as NoteFields['type'])}>{NOTE_TYPES.map(type => <option key={type} value={type}>{type.replace('_', ' ')}</option>)}</select>
-        {draft.type === 'procedure' && <button type="button" onClick={() => change('bodyMarkdown', `${draft.bodyMarkdown}${draft.bodyMarkdown ? '\n\n' : ''}## Purpose\n\n## Prerequisites\n\n## Steps\n\n1. \n\n## Verification\n\n## Cautions\n`)}>Append procedure template</button>}
-        <label htmlFor="note-tags">Tags (comma separated, up to 32)</label><input id="note-tags" value={tags} onChange={event => { setTags(event.target.value); setDirty(true); }} />
-        <label htmlFor="note-explanation">Personal explanation</label><textarea id="note-explanation" value={draft.personalExplanation} onChange={event => change('personalExplanation', event.target.value)} />
-        <label htmlFor="note-applicable">Applicable product or version</label><input id="note-applicable" value={draft.applicableVersion} onChange={event => change('applicableVersion', event.target.value)} />
-        <label htmlFor="note-review">Review date</label><input id="note-review" type="date" value={draft.reviewAfter ?? ''} onChange={event => change('reviewAfter', event.target.value || null)} />
-        </details>
-      </fieldset>
+      <NoteEditor draft={draft} tags={tags} placeholder={placeholder} locked={locked} preview={preview} change={change}
+        onTagsChange={value => { setTags(value); setDirty(true); }} onPreviewChange={setPreview}
+        onPlaceholderChange={setPlaceholder} onNotice={setNotice} />
       <div className="actions"><button type="submit" disabled={busy || !generation || !draft.bodyMarkdown.trim() || !!conflict}>{pending.current ? 'Retry same save' : 'Save note'}</button>
         {!pending.current && <button className="secondary" type="button" disabled={busy} onClick={() => { adopt(note); if (!note) setShowDetail(false); }}>Cancel</button>}</div>
     </form>}
@@ -295,55 +265,14 @@ export function ManualLibrary({ noteId, selectNote, active, navigationGuard }: {
       </div><p className="caption">Undo removes this new note and its exclusive excerpts. Shared sources remain.</p>
     </div>}
     {note && <NoteManagement key={note.id} note={note} generation={generation} disabled={dirty || busy || !!pending.current || !!selectionAction} pendingChange={setManagementPending} changed={async id => { openedQuery.current = id; selectNote(id, true); await open(id); await refresh(0); setNotice('Change saved in history.'); }} />}
-    {note && <details className="context-section"><summary>Sources ({sources.length})</summary>
-    {!sources.length && <p>This note has no retained source excerpts.</p>}
-    {!!sources.length && <article aria-label="Local source excerpts"><h3>Local source excerpts</h3><p>These are retained excerpts, not necessarily a complete conversation. Check the original page to verify the exact quote.</p>
-      {sources.map((source, index) => <div key={source.id} className="source-excerpt">
-        <h4>Fragment {index + 1} · {source.sourceRole ?? 'unknown'} · {source.blockKind ?? 'text'}</h4>
-        <pre className={source.blockKind === 'code' ? 'archive-code' : undefined}>{source.exactText}</pre>
-        {source.sourceRemovedAt && <p>Archive source removed on {new Date(source.sourceRemovedAt).toLocaleString()}. This deliberately retained excerpt remains in Knowledge.</p>}
-        <p className="caption">{source.sourceProvider ?? 'Unknown provider'} · {new Date(source.capturedAt).toLocaleString()} · retained excerpt anchor: {source.anchorStatus}. Original page identity: {source.originalPageAnchor ? 'observed; relocation unverified' : 'unresolved'}.</p>
-        <p>Temporary mode: {source.temporaryStatus ?? 'unknown'}. {source.fidelityWarnings.map(warning => warning.replaceAll('_', ' ')).join('; ')}.</p>
-        {source.sourceUrl && safeLink(source.sourceUrl) ? <a href={safeLink(source.sourceUrl)!} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Open original conversation</a> : <p>Original URL unavailable.</p>}
-        <button onClick={async () => {
-          setSourceChecks(checks => ({ ...checks, [source.id]: 'Checking original source…' }));
-          try {
-            const reply = await chrome.runtime.sendMessage({ protocolVersion: 1, type: 'VerifyOriginalSource', generation, sourceId: source.id });
-            const messages: Record<string, string> = { verified: 'Original source verified now; exact quote selected on the source page.', ambiguous: 'Original source ambiguous; no location was chosen.', missing: 'Original message is not loaded. Its local excerpt remains available.', changed: 'Source changed: the same message identity no longer contains the saved quote.', unavailable: 'Original source unavailable. Open one matching ChatGPT tab with access enabled, or use the local excerpt.' };
-            setSourceChecks(checks => ({ ...checks, [source.id]: messages[reply?.location] ?? 'Original source could not be checked. Local excerpt remains available.' }));
-          } catch { setSourceChecks(checks => ({ ...checks, [source.id]: 'Original source unavailable. Local excerpt remains available.' })); }
-        }}>Check original in open ChatGPT tab</button><p role="status">{sourceChecks[source.id]}</p>
-      </div>)}
-    </article>}
-    {sources.some(source => source.conversationId) && <details><summary>Manage Archive sources</summary>
-      {[...new Map(sources.filter(s => s.conversationId).map(s => [s.conversationId!, s])).values()].map(source => <div key={source.conversationId!}>
-        <h4>{source.sourceTitle}</h4>
-        {source.captureId && <p><a href={chrome.runtime.getURL(`library.html?capture=${source.captureId}`)} target="_blank" rel="noopener noreferrer">Open retained Archive source</a></p>}
-        <DeleteControl generation={generation} target={{ kind: 'conversation', conversationId: source.conversationId!, mode: 'keep_knowledge' }} label="Delete Archive source, keep Knowledge excerpts" />
-        <DeleteControl generation={generation} target={{ kind: 'conversation', conversationId: source.conversationId!, mode: 'with_knowledge' }} label="Remove source and all dependent content permanently" />
-      </div>)}
-    </details>}
-    </details>}
+    {note && <NoteSources sources={sources} generation={generation} checks={sourceChecks} onCheck={checkOriginalSource} />}
     <p role="status">{notice}{dirty ? ' Unsaved draft — keep this page open.' : ''}</p>
     {failure && <div role="alert"><strong>{failure.code}</strong><p>{failure.message}</p>{pending.current && <p>Resolve this save with Retry before editing or switching notes.</p>}</div>}
     {conflict && <div className="conflict"><h3>Latest saved version {conflict.recordVersion}</h3><SafeMarkdown body={conflict.bodyMarkdown} /><NoteMetadata note={conflict} />
       <p>Your draft remains in the editor. Compare every field before choosing.</p>
       <div className="actions"><button onClick={() => { setNote(conflict); setSources(conflictSources); setHistory(conflictHistory); setHistoryOffset(0); setConflict(undefined); }}>Keep my draft against this version</button><button onClick={() => { adopt(conflict); setSources(conflictSources); setHistory(conflictHistory); setHistoryOffset(0); }}>Use latest saved version</button></div></div>}
-    {!!history.length && <details className="context-section"><summary>History · Saved history ({note?.currentVersion} versions)</summary>
-      <p>History retains earlier text until you confirm permanent deletion of the note or its source and dependent content.</p>
-      <ul>{history.map(entry => <li key={entry.version}><button disabled={!canSwitch} onClick={async () => {
-        setBusy(true);
-        try {
-          const reply = await send({ protocolVersion: 1, type: 'GetNoteRevision', generation, noteId: note!.id, version: entry.version });
-          if (reply.ok && 'revision' in reply) { setHistorical(reply.revision.snapshot); setHistoricalSources(reply.revision.sources ?? []); } else if (!reply.ok) setFailure(reply);
-        } finally { setBusy(false); }
-      }}>View version {entry.version}</button> {entry.changeReason} · {new Date(entry.changedAt).toLocaleString()}</li>)}</ul>
-      {historyOffset > 0 && <button disabled={!canSwitch} onClick={() => void historyPage(Math.max(0, historyOffset - 50))}>Newer history</button>}
-      {note && historyOffset + history.length < note.currentVersion && <button disabled={!canSwitch} onClick={() => void historyPage(historyOffset + 50)}>Older history</button>}
-      {historical && <article aria-label="Saved revision"><h3>Version {historical.recordVersion}: {historical.title}</h3><SafeMarkdown body={historical.bodyMarkdown} /><NoteMetadata note={historical} />
-        {historicalSources.map(source => <div key={source.id}><h4>{source.sourceTitle}</h4><pre>{source.exactText}</pre>{source.sourceRemovedAt && <p>Archive source removed; excerpt retained.</p>}</div>)}
-      </article>}
-    </details>}
+    {!!history.length && <NoteHistory history={history} note={note} historyOffset={historyOffset} historical={historical}
+      historicalSources={historicalSources} disabled={!canSwitch} onOpenRevision={openRevision} onPage={historyPage} />}
     </>}
     </div>
     {switchRequest && createPortal(<dialog className="draft-dialog" ref={switchDialog} aria-labelledby="draft-dialog-title" onCancel={event => { event.preventDefault(); cancelSwitch(); }}>
